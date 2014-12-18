@@ -21,38 +21,52 @@ import (
 	"net/http/httputil"
 )
 
-// Transport logs all requests and responses at every RoundTrip using the
-// provided logging function.
+// Transport satisfies http.RoundTripper
 type Transport struct {
-	Transport http.RoundTripper
+	transport http.RoundTripper
 	// Should the body of the requests and responses be logged.
-	LogBody bool
-	// If Logf is nil log.Printf will be used.
-	Logf func(format string, vs ...interface{})
+	logBody bool
+	// If logf is nil log.Printf will be used.
+	logf func(format string, vs ...interface{})
 }
+
+// NewTransport returns a new Transport that uses the given RoundTripper, or
+// http.DefaultTransport if nil, and logs all requests and responses using
+// logf, or log.Printf if nil.
+// The body of the requests and responses are logged too only if logBody is
+// true.
+func NewTransport(rt http.RoundTripper, logBody bool, logf func(string, ...interface{})) Transport {
+	if rt == nil {
+		rt = http.DefaultTransport
+	}
+	if logf == nil {
+		logf = log.Printf
+	}
+	return Transport{rt, logBody, logf}
+}
+
+// Client returns a new http.Client using the given transport.
+func (t Transport) Client() http.Client { return http.Client{Transport: t} }
 
 // Transport satifies http.RoundTripper
 func (t Transport) RoundTrip(req *http.Request) (*http.Response, error) {
-	if t.Logf == nil {
-		t.Logf = log.Printf
-	}
-	if b, err := httputil.DumpRequest(req, t.LogBody); err != nil {
-		t.Logf("httplog: dump request: %v", err)
+	if b, err := httputil.DumpRequest(req, t.logBody); err != nil {
+		t.logf("httplog: dump request: %v", err)
 		return nil, err
 	} else {
-		t.Logf("httplog: %s", b)
+		t.logf("httplog: %s", b)
 	}
 
-	res, err := t.Transport.RoundTrip(req)
+	res, err := t.transport.RoundTrip(req)
 	if err != nil {
-		t.Logf("httplog: roundtrip error: %v", err)
+		t.logf("httplog: roundtrip error: %v", err)
 		return res, err
 	}
 
-	if b, err := httputil.DumpResponse(res, t.LogBody); err != nil {
-		t.Logf("httplog: dump response: %v", err)
+	if b, err := httputil.DumpResponse(res, t.logBody); err != nil {
+		t.logf("httplog: dump response: %v", err)
 	} else {
-		t.Logf("httplog: %s", b)
+		t.logf("httplog: %s", b)
 	}
 	return res, err
 }
